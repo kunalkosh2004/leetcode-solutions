@@ -411,11 +411,182 @@ def sync(
         )
         raise typer.Exit(1)
 
-    # This is a placeholder for Phase 4 implementation
-    console.print(
-        "[yellow]Sync command not yet implemented.[/yellow]"
+    project_root = find_project_root()
+    state_manager = StateManager()
+    config = load_config()
+
+    from leetcode_sync.generator.readme import generate_readme
+    from leetcode_sync.generator.solution import (
+        generate_solution_file,
     )
-    console.print("This will be implemented in Phase 4.")
+    from leetcode_sync.generator.topics import (
+        update_root_readme,
+        update_topic_indexes,
+    )
+    from leetcode_sync.leetcode.client import LeetCodeClient
+
+    try:
+        with LeetCodeClient(config) as client:
+            console.print("\nChecking LeetCode...\n")
+            submissions_list = client.get_recent_submissions(50)
+
+            # Filter to accepted only
+            accepted = [
+                s for s in submissions_list if s.is_accepted
+            ]
+
+            if not accepted:
+                console.print(
+                    "[yellow]No accepted submissions found.[/yellow]"
+                )
+                return
+
+            # Find new submissions not yet processed
+            new_submissions = [
+                s
+                for s in accepted
+                if not state_manager.is_processed(s.submission_id)
+            ]
+
+            if not new_submissions:
+                console.print(
+                    "[green]✓ All submissions already synced.[/green]"
+                )
+                return
+
+            console.print(
+                f"Found [cyan]{len(new_submissions)}[/cyan] "
+                f"new accepted submissions.\n"
+            )
+
+            # Prepare output directories
+            leetcode_dir = project_root / "leetcode"
+            topics_dir = project_root / "topics"
+            leetcode_dir.mkdir(parents=True, exist_ok=True)
+            topics_dir.mkdir(parents=True, exist_ok=True)
+
+            dirs_created = []
+            topics_updated = []
+            errors = []
+
+            for sub in new_submissions:
+                # Fetch full problem data
+                console.print(
+                    f"  Fetching #{sub.question_id} {sub.title}..."
+                )
+                problem = client.get_problem_with_submission(sub)
+
+                if not problem:
+                    errors.append(
+                        f"Could not fetch problem: {sub.title}"
+                    )
+                    continue
+
+                problem_dir = leetcode_dir / problem.folder_name
+
+                if dry_run:
+                    # Dry run: just show what would happen
+                    if not problem_dir.exists():
+                        dirs_created.append(problem_dir)
+                    console.print(
+                        f"  [green]✓[/green] "
+                        f"#{problem.number} {problem.title}"
+                    )
+                    console.print(
+                        f"    Difficulty: "
+                        f"{problem.difficulty.value}"
+                    )
+                    console.print(
+                        f"    Topics: "
+                        f"{', '.join(problem.topics)}"
+                    )
+                else:
+                    # Actually create the files
+                    problem_dir.mkdir(parents=True, exist_ok=True)
+
+                    try:
+                        generate_solution_file(
+                            problem, problem_dir, force=force
+                        )
+                        generate_readme(
+                            problem, problem_dir, force=force
+                        )
+                    except FileExistsError as e:
+                        console.print(
+                            f"  [yellow]![/yellow] {e}"
+                        )
+                        continue
+
+                    # Update topic indexes
+                    updated_topics = update_topic_indexes(
+                        problem, topics_dir
+                    )
+                    topics_updated.extend(updated_topics)
+
+                    # Mark as processed
+                    state_manager.mark_processed(
+                        sub.submission_id
+                    )
+
+                    dirs_created.append(problem_dir)
+
+                    console.print(
+                        f"  [green]✓[/green] "
+                        f"#{problem.number} {problem.title}"
+                    )
+                    console.print(
+                        f"    Difficulty: "
+                        f"{problem.difficulty.value}"
+                    )
+                    console.print(
+                        f"    Topics: "
+                        f"{', '.join(problem.topics)}"
+                    )
+
+            # Update root README stats (not in dry run)
+            if not dry_run and dirs_created:
+                update_root_readme(
+                    leetcode_dir, topics_dir, project_root
+                )
+
+            # Summary
+            console.print()
+            if dry_run:
+                console.print(
+                    "[yellow]Dry run complete. "
+                    "No changes made.[/yellow]"
+                )
+            else:
+                console.print(
+                    "[bold green]Sync complete![/bold green]"
+                )
+
+            if dirs_created:
+                console.print(
+                    "\n[bold]Generated:[/bold]"
+                )
+                for d in dirs_created:
+                    console.print(f"  {d.relative_to(project_root)}")
+
+            if errors:
+                console.print(
+                    "\n[bold red]Errors:[/bold red]"
+                )
+                for err in errors:
+                    console.print(f"  [red]✗ {err}[/red]")
+
+            if not dry_run and dirs_created:
+                console.print(
+                    "\nGit changes available."
+                )
+                console.print(
+                    "Run [cyan]leetcode-sync push[/cyan] "
+                    "to commit and push."
+                )
+
+    except Exception as e:
+        console.print(f"[red]✗ Error: {e}[/red]")
+        raise typer.Exit(1) from None
 
 
 @app.command("git-status")
