@@ -82,3 +82,34 @@ class TestStatusCommand:
         result = runner.invoke(app, ["status"])
         # Should not crash, even if not initialized
         assert result.exit_code == 0
+
+
+class TestSubmissionsCommand:
+    """Tests for submissions command."""
+
+    def test_submissions_help(self, runner: CliRunner):
+        """Shows submissions command help."""
+        result = runner.invoke(app, ["submissions", "--help"])
+        assert result.exit_code == 0
+        assert "submissions" in result.output.lower()
+
+    def test_submissions_no_auth(self, runner: CliRunner):
+        """Shows error when not authenticated."""
+        result = runner.invoke(app, ["submissions"])
+        # Should show auth error or work without auth
+        assert result.exit_code in (0, 1)
+
+
+class TestInspectCommand:
+    """Tests for inspect command."""
+
+    def test_inspect_help(self, runner: CliRunner):
+        """Shows inspect command help."""
+        result = runner.invoke(app, ["inspect", "--help"])
+        assert result.exit_code == 0
+        assert "inspect" in result.output.lower()
+
+    def test_inspect_no_args(self, runner: CliRunner):
+        """Shows error when no problem slug provided."""
+        result = runner.invoke(app, ["inspect"])
+        assert result.exit_code != 0

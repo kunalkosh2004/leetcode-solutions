@@ -269,10 +269,129 @@ def status(
 
 
 @app.command()
-def sync(
-    dry_run: bool = typer.Option(False, "--dry-run", "-n", help="Preview changes without applying"),
-    force: bool = typer.Option(False, "--force", "-f", help="Overwrite existing files"),
+def submissions(
+    limit: int = typer.Option(20, "--limit", "-l", help="Number of submissions to fetch"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed info"),
+) -> None:
+    """Show recent accepted submissions from LeetCode.
+
+    This command tests the LeetCode API connection without writing files.
+    """
+    setup_logging(verbose)
+
+    config = load_config()
+    if not config.is_authenticated:
+        console.print("[red]✗ Not authenticated with LeetCode.[/red]")
+        console.print("\nRun [cyan]leetcode-sync auth[/cyan] for setup instructions.")
+        raise typer.Exit(1)
+
+    from leetcode_sync.leetcode.client import (
+        LeetCodeClient,
+    )
+
+    try:
+        with LeetCodeClient(config) as client:
+            console.print("\nFetching recent submissions...\n")
+            submissions_list = client.get_recent_submissions(limit)
+
+            if not submissions_list:
+                console.print("[yellow]No submissions found.[/yellow]")
+                return
+
+            console.print(
+                f"Found [cyan]{len(submissions_list)}[/cyan] submissions:\n"
+            )
+
+            for sub in submissions_list:
+                status_color = (
+                    "green" if sub.is_accepted else "red"
+                )
+                console.print(
+                    f"  [{status_color}]✓[/{status_color}] "
+                    f"[cyan]{sub.submission_id}[/cyan] "
+                    f"{sub.title}"
+                )
+                console.print(
+                    f"    Status: [{status_color}]{sub.status}[/{status_color}]"
+                    f" | Language: {sub.language}"
+                    f" | {sub.submitted_at}"
+                )
+                console.print()
+
+    except Exception as e:
+        console.print(f"[red]✗ Error: {e}[/red]")
+        raise typer.Exit(1) from None
+
+
+@app.command()
+def inspect(
+    problem_slug: str = typer.Argument(
+        ..., help="Problem slug or submission ID"
+    ),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed info"),
+) -> None:
+    """Inspect a LeetCode problem or submission.
+
+    Fetches and displays detailed problem metadata.
+    """
+    setup_logging(verbose)
+
+    config = load_config()
+    if not config.is_authenticated:
+        console.print("[red]✗ Not authenticated with LeetCode.[/red]")
+        console.print("\nRun [cyan]leetcode-sync auth[/cyan] for setup instructions.")
+        raise typer.Exit(1)
+
+    from leetcode_sync.leetcode.client import LeetCodeClient
+
+    try:
+        with LeetCodeClient(config) as client:
+            console.print(f"\nFetching problem: {problem_slug}\n")
+            problem = client.get_problem(problem_slug)
+
+            if not problem:
+                console.print(
+                    f"[red]✗ Problem not found: {problem_slug}[/red]"
+                )
+                raise typer.Exit(1)
+
+            # Display problem info
+            console.print(
+                f"[bold]#{problem.number}. {problem.title}[/bold]"
+            )
+            console.print(
+                f"Difficulty: [cyan]{problem.difficulty.value}[/cyan]"
+            )
+
+            if problem.topics:
+                console.print(
+                    f"Topics: {', '.join(problem.topics)}"
+                )
+
+            console.print(
+                f"\nDescription length: "
+                f"{len(problem.description)} chars"
+            )
+
+    except Exception as e:
+        console.print(f"[red]✗ Error: {e}[/red]")
+        raise typer.Exit(1) from None
+
+
+@app.command()
+def sync(
+    dry_run: bool = typer.Option(
+        False, "--dry-run", "-n",
+        help="Preview changes without applying",
+    ),
+    force: bool = typer.Option(
+        False, "--force", "-f",
+        help="Overwrite existing files",
+    ),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v",
+        help="Show detailed info",
+    ),
 ) -> None:
     """Sync accepted submissions from LeetCode.
 
@@ -283,12 +402,19 @@ def sync(
 
     config = load_config()
     if not config.is_authenticated:
-        console.print("[red]✗ Not authenticated with LeetCode.[/red]")
-        console.print("\nRun [cyan]leetcode-sync auth[/cyan] for setup instructions.")
+        console.print(
+            "[red]✗ Not authenticated with LeetCode.[/red]"
+        )
+        console.print(
+            "\nRun [cyan]leetcode-sync auth[/cyan] "
+            "for setup instructions."
+        )
         raise typer.Exit(1)
 
     # This is a placeholder for Phase 4 implementation
-    console.print("[yellow]Sync command not yet implemented.[/yellow]")
+    console.print(
+        "[yellow]Sync command not yet implemented.[/yellow]"
+    )
     console.print("This will be implemented in Phase 4.")
 
 
