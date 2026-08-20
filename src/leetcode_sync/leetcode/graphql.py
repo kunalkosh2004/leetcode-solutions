@@ -6,10 +6,11 @@ This makes it easy to update queries when LeetCode changes their API.
 
 from __future__ import annotations
 
-# Query to get recent submissions for a user
-RECENT_SUBMISSIONS_QUERY = """
-query recentAcSubmissions($username: String!) {
-    recentAcSubmissions(limit: 20, username: $username) {
+# Query to get user's recent AC submissions (authenticated)
+# recentAcSubmissionList requires username and limit
+RECENT_AC_SUBMISSIONS_QUERY = """
+query recentAcSubmissionList($username: String!, $limit: Int!) {
+    recentAcSubmissionList(username: $username, limit: $limit) {
         id
         title
         titleSlug
@@ -43,9 +44,10 @@ query problemsetQuestionDetail($titleSlug: String!) {
 """
 
 # Query to get submission detail (includes source code)
+# Note: field is submissionDetails (plural), submissionId is Int!, lang is LanguageNode!
 SUBMISSION_DETAIL_QUERY = """
-query submissionDetail($submissionId: ID!) {
-    submissionDetail(submissionId: $submissionId) {
+query submissionDetail($submissionId: Int!) {
+    submissionDetails(submissionId: $submissionId) {
         id
         question {
             questionId
@@ -58,14 +60,27 @@ query submissionDetail($submissionId: ID!) {
             }
         }
         statusDisplay
-        lang
-        source
+        lang {
+            name
+            verboseName
+        }
+        code
         timestamp
     }
 }
 """
 
-# Query to get current user info (for verification)
+# Query to get current signed-in user status (no args needed)
+USER_STATUS_QUERY = """
+query userStatus {
+    userStatus {
+        username
+        isSignedIn
+    }
+}
+"""
+
+# Query to get user profile by username
 USER_INFO_QUERY = """
 query userPublicProfile($username: String!) {
     matchedUser(username: $username) {
@@ -78,18 +93,10 @@ query userPublicProfile($username: String!) {
 }
 """
 
-# Query to get user's recent AC submissions (authenticated)
-RECENT_AC_SUBMISSIONS_QUERY = """
-query submissionList(
-    $offset: Int!
-    $limit: Int!
-    $status: SubmissionStatusEnum
-) {
-    submissionList(
-        offset: $offset
-        limit: $limit
-        status: $status
-    ) {
+# Query to get user's recent submissions (authenticated, with full question data)
+RECENT_SUBMISSIONS_QUERY = """
+query submissionList($offset: Int!, $limit: Int!) {
+    submissionList(offset: $offset, limit: $limit) {
         lastKey
         hasNext
         submissions {
@@ -99,12 +106,7 @@ query submissionList(
             runtime
             memory
             timestamp
-            question {
-                questionId
-                titleSlug
-                title
-                translatedTitle
-            }
+            url
         }
     }
 }

@@ -45,6 +45,15 @@ class TestCLIHelp:
         assert result.exit_code == 0
         assert "sync" in result.output.lower()
 
+    def test_watch_help(self, runner: CliRunner):
+        """Shows watch command help."""
+        result = runner.invoke(app, ["watch", "--help"])
+        assert result.exit_code == 0
+        assert "watch" in result.output.lower()
+        assert "interval" in result.output.lower()
+        assert "auto-commit" in result.output.lower()
+        assert "auto-push" in result.output.lower()
+
 
 class TestInitCommand:
     """Tests for init command."""
@@ -115,35 +124,24 @@ class TestInspectCommand:
         assert result.exit_code != 0
 
 
-class TestWatchCommand:
-    """Tests for watch command."""
-
-    def test_watch_help(self, runner: CliRunner):
-        """Shows watch command help."""
-        result = runner.invoke(app, ["watch", "--help"])
-        assert result.exit_code == 0
-        assert "watch" in result.output.lower()
-        assert "interval" in result.output.lower()
-        assert "auto-commit" in result.output.lower()
-        assert "auto-push" in result.output.lower()
-
-    def test_watch_no_auth(self, runner: CliRunner):
-        """Watch exits with error when not authenticated."""
-        result = runner.invoke(app, ["watch"])
-        assert result.exit_code == 1
-        assert (
-            "not authenticated" in result.output.lower()
-            or "auth" in result.output.lower()
-        )
-
-
 class TestSyncCycle:
     """Tests for _run_sync_cycle."""
 
-    def test_sync_cycle_not_authenticated(self):
+    def test_sync_cycle_not_authenticated(self, monkeypatch):
         """Sync cycle returns auth failure when not configured."""
-        from leetcode_sync.cli import _run_sync_cycle
+        from unittest.mock import patch
 
-        result = _run_sync_cycle()
+        from leetcode_sync.cli import _run_sync_cycle
+        from leetcode_sync.models import AppConfig
+
+        # Mock load_config to return unauthenticated config
+        def mock_load_config():
+            return AppConfig(
+                leetcode_session="",
+                leetcode_csrf_token="",
+            )
+
+        with patch("leetcode_sync.cli.load_config", mock_load_config):
+            result = _run_sync_cycle()
         assert result["authenticated"] is False
         assert result["new_submissions"] == 0

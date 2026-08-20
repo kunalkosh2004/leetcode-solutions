@@ -229,3 +229,37 @@ src/leetcode_sync/
 ## License
 
 MIT
+
+<!-- LEETCODE_STATS_START -->
+## Progress
+
+| Difficulty | Solved |
+|------------|--------|
+| Easy | 6 |
+| Medium | 14 |
+| Hard | 0 |
+| Total | 20 |
+
+## Topics
+
+| Topic | Problems |
+|-------|----------|
+| Linked List | 18 |
+| Array | 8 |
+| Hash Table | 7 |
+| Design | 7 |
+| Recursion | 4 |
+| Two Pointers | 4 |
+| Doubly-Linked List | 4 |
+| Stack | 3 |
+| Simulation | 3 |
+| Math | 2 |
+| Heap (Priority Queue) | 2 |
+| Hash Function | 2 |
+| Data Stream | 2 |
+| Greedy | 1 |
+| Bit Manipulation | 1 |
+| Queue | 1 |
+| Monotonic Stack | 1 |
+| Ordered Set | 1 |
+<!-- LEETCODE_STATS_END -->

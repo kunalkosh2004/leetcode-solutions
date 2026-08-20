@@ -458,6 +458,12 @@ def sync(
         raise typer.Exit(1) from None
 
 
+@app.command("debug-api")
+def debug_api() -> None:
+    """Debug LeetCode API connectivity and authentication."""
+    _debug_api()
+
+
 @app.command("git-status")
 def git_status_cmd() -> None:
     """Show git status for the leetcode-sync repository."""
@@ -566,6 +572,103 @@ def push(
     except GitError as e:
         console.print(f"[red]✗ Push failed: {e}[/red]")
         raise typer.Exit(1) from None
+
+
+def _debug_api() -> None:
+    """Debug the LeetCode API by testing raw queries."""
+    config = load_config()
+
+    console.print("\n[bold]Debugging LeetCode API...[/bold]\n")
+
+    # Check config
+    console.print("[bold]Config:[/bold]")
+    if config.leetcode_session:
+        console.print(f"  Session: [green]set[/green] (len={len(config.leetcode_session)})")
+    else:
+        console.print("  Session: [red]not set[/red]")
+
+    if config.leetcode_csrf_token:
+        console.print(f"  CSRF: [green]set[/green] (len={len(config.leetcode_csrf_token)})")
+    else:
+        console.print("  CSRF: [red]not set[/red]")
+
+    console.print(f"  Authenticated: {config.is_authenticated}")
+    console.print()
+
+    if not config.is_authenticated:
+        console.print("[red]✗ Not authenticated. Set LEETCODE_SESSION in .env[/red]")
+        return
+
+    from leetcode_sync.leetcode.client import (
+        LEETCODE_GRAPHQL_URL,
+        LeetCodeClient,
+    )
+
+    with LeetCodeClient(config) as client:
+        c = client._get_client()
+
+        # Test 1: recentAcSubmissionList (needs username)
+        query1 = """
+        query recentAcSubmissionList($username: String!, $limit: Int!) {
+            recentAcSubmissionList(username: $username, limit: $limit) {
+                id
+                title
+                titleSlug
+                timestamp
+                lang
+            }
+        }
+        """
+        console.print("Test 1: recentAcSubmissionList...")
+        try:
+            r = c.post(
+                LEETCODE_GRAPHQL_URL,
+                json={"query": query1, "variables": {"username": "kunalkosh04", "limit": 5}},
+            )
+            console.print(f"  Status: {r.status_code}")
+            if r.status_code == 200:
+                import json
+                data = json.loads(r.text)
+                submissions = data.get("data", {}).get("recentAcSubmissionList")
+                if submissions:
+                    console.print(f"  Found {len(submissions)} submissions")
+                    for s in submissions[:3]:
+                        console.print(f"    - {s.get('title')} ({s.get('lang')})")
+                else:
+                    console.print(f"  Raw response: {r.text[:500]}")
+            else:
+                console.print(f"  Body: {r.text[:500]}")
+        except Exception as e:
+            console.print(f"  Error: {e}")
+
+        console.print()
+
+        # Test 2: Check user signed in
+        query2 = """
+        query {
+            userStatus {
+                username
+                isSignedIn
+            }
+        }
+        """
+        console.print("Test 2: userStatus...")
+        try:
+            r = c.post(
+                LEETCODE_GRAPHQL_URL,
+                json={"query": query2, "variables": {}},
+            )
+            console.print(f"  Status: {r.status_code}")
+            if r.status_code == 200:
+                import json
+                data = json.loads(r.text)
+                status = data.get("data", {}).get("userStatus", {})
+                console.print(f"  Username: {status.get('username', '(empty)')}")
+                console.print(f"  Signed in: {status.get('isSignedIn')}")
+            else:
+                console.print(f"  Body: {r.text[:300]}")
+        except Exception as e:
+            console.print(f"  Error: {e}")
 
 
 def _run_sync_cycle(

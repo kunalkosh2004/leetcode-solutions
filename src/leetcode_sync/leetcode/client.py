@@ -19,7 +19,7 @@ from leetcode_sync.leetcode.graphql import (
     PROBLEM_DETAIL_QUERY,
     RECENT_AC_SUBMISSIONS_QUERY,
     SUBMISSION_DETAIL_QUERY,
-    USER_INFO_QUERY,
+    USER_STATUS_QUERY,
 )
 from leetcode_sync.models import Difficulty, Problem, Submission
 
@@ -54,17 +54,23 @@ class LeetCodeClient:
         self._client: httpx.Client | None = None
 
     @property
+    def _cookies(self) -> dict[str, str]:
+        """Build cookies dict with authentication."""
+        cookies: dict[str, str] = {}
+        if self.config.leetcode_session:
+            cookies["LEETCODE_SESSION"] = self.config.leetcode_session
+        if self.config.leetcode_csrf_token:
+            cookies["csrftoken"] = self.config.leetcode_csrf_token
+        return cookies
+
+    @property
     def _headers(self) -> dict[str, str]:
-        """Build request headers with authentication cookies."""
-        headers = {
+        """Build request headers."""
+        headers: dict[str, str] = {
             "Content-Type": "application/json",
             "Referer": f"{LEETCODE_BASE_URL}/",
             "Origin": LEETCODE_BASE_URL,
         }
-        if self.config.leetcode_session:
-            headers["Cookie"] = (
-                f"LEETCODE_SESSION={self.config.leetcode_session}"
-            )
         if self.config.leetcode_csrf_token:
             headers["x-csrftoken"] = self.config.leetcode_csrf_token
         return headers
@@ -75,6 +81,7 @@ class LeetCodeClient:
             self._client = httpx.Client(
                 base_url=LEETCODE_BASE_URL,
                 headers=self._headers,
+                cookies=self._cookies,
                 timeout=30.0,
                 follow_redirects=True,
             )
@@ -114,27 +121,53 @@ class LeetCodeClient:
                 LEETCODE_GRAPHQL_URL,
                 json={"query": query, "variables": variables},
             )
-            response.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 401:
-                raise LeetCodeAuthError(
-                    "Authentication failed. Your LeetCode session may have expired.\n"
-                    "Run: leetcode-sync auth"
-                ) from e
-            raise LeetCodeAPIError(
-                f"LeetCode API error: {e.response.status_code}"
-            ) from e
         except httpx.RequestError as e:
             raise LeetCodeAPIError(
                 f"Network error connecting to LeetCode: {e}"
             ) from e
 
+        if response.status_code != 200:
+            body = response.text[:500]
+            logger.debug(
+                "LeetCode API %d response: %s",
+                response.status_code,
+                body,
+            )
+            if response.status_code == 401:
+                raise LeetCodeAuthError(
+                    "Authentication failed. Your LeetCode session may have expired.\n"
+                    "Run: leetcode-sync auth"
+                )
+            raise LeetCodeAPIError(
+                f"LeetCode API error: {response.status_code} - {body}"
+            )
+
         data = response.json()
         if "errors" in data:
+            error_msgs = [
+                e.get("message", str(e)) for e in data["errors"]
+            ]
             raise LeetCodeAPIError(
-                f"LeetCode GraphQL error: {data['errors']}"
+                f"LeetCode GraphQL error: {'; '.join(error_msgs)}"
             )
         return data.get("data", {})
+
+    def get_current_username(self) -> str | None:
+        """Get the currently authenticated username.
+
+        Uses the userStatus query which requires no arguments.
+
+        Returns:
+            Username if authenticated, None otherwise.
+        """
+        try:
+            data = self._graphql_query(USER_STATUS_QUERY, {})
+            status = data.get("userStatus", {})
+            if status.get("isSignedIn") and status.get("username"):
+                return status["username"]
+        except Exception:
+            pass
+        return None
 
     def verify_auth(self) -> str | None:
         """Verify authentication by fetching current user info.
@@ -142,19 +175,15 @@ class LeetCodeClient:
         Returns:
             Username if authenticated, None otherwise.
         """
-        try:
-            data = self._graphql_query(USER_INFO_QUERY, {"username": ""})
-            user = data.get("matchedUser")
-            if user:
-                return user.get("username")
-        except Exception:
-            pass
-        return None
+        return self.get_current_username()
 
-    def get_recent_submissions(self, limit: int = 20) -> list[Submission]:
+    def get_recent_submissions(
+        self, limit: int = 20
+    ) -> list[Submission]:
         """Get recent accepted submissions.
 
-        Uses the authenticated submission list endpoint.
+        Uses the recentAcSubmissionList query which returns
+        accepted submissions for the authenticated user.
 
         Args:
             limit: Maximum number of submissions to fetch.
@@ -162,38 +191,42 @@ class LeetCodeClient:
         Returns:
             List of Submission objects.
         """
+        # Get current username first
+        username = self.verify_auth()
+        if not username:
+            raise LeetCodeAuthError(
+                "Could not determine authenticated username.\n"
+                "Your session may have expired. Run: leetcode-sync auth"
+            )
+
         data = self._graphql_query(
             RECENT_AC_SUBMISSIONS_QUERY,
-            {
-                "offset": 0,
-                "limit": limit,
-                "status": "AC",
-            },
+            {"username": username, "limit": limit},
         )
 
         submissions = []
-        submission_list = data.get("submissionList", {})
-        raw_submissions = submission_list.get("submissions", [])
+        raw_list = data.get("recentAcSubmissionList", [])
 
-        for raw in raw_submissions:
-            question = raw.get("question", {})
+        for raw in raw_list:
             submissions.append(
                 Submission(
                     submission_id=str(raw.get("id", "")),
-                    question_id=int(question.get("questionId", 0)),
-                    title=question.get("title", ""),
-                    title_slug=question.get("titleSlug", ""),
-                    status=raw.get("statusDisplay", ""),
+                    question_id=0,  # Not available in this query
+                    title=raw.get("title", ""),
+                    title_slug=raw.get("titleSlug", ""),
+                    status="Accepted",
                     language=raw.get("lang", ""),
                     timestamp=int(raw.get("timestamp", 0)),
-                    runtime=raw.get("runtime"),
-                    memory=raw.get("memory"),
+                    runtime=None,
+                    memory=None,
                 )
             )
 
         return submissions
 
-    def get_submission_detail(self, submission_id: str) -> dict[str, Any] | None:
+    def get_submission_detail(
+        self, submission_id: str
+    ) -> dict[str, Any] | None:
         """Get detailed submission info including source code.
 
         Args:
@@ -204,11 +237,16 @@ class LeetCodeClient:
         """
         try:
             data = self._graphql_query(
-                SUBMISSION_DETAIL_QUERY, {"submissionId": submission_id}
+                SUBMISSION_DETAIL_QUERY,
+                {"submissionId": int(submission_id)},
             )
-            return data.get("submissionDetail")
+            return data.get("submissionDetails")
         except Exception as e:
-            logger.warning("Failed to fetch submission %s: %s", submission_id, e)
+            logger.warning(
+                "Failed to fetch submission %s: %s",
+                submission_id,
+                e,
+            )
             return None
 
     def get_problem(self, title_slug: str) -> Problem | None:
@@ -268,9 +306,16 @@ class LeetCodeClient:
 
         # Then get submission detail for source code
         detail = self.get_submission_detail(submission.submission_id)
-        if detail and detail.get("source"):
-            problem.code = detail["source"]
-            problem.language = detail.get("lang", submission.language)
+        if detail and detail.get("code"):
+            problem.code = detail["code"]
+            # lang is now a LanguageNode object
+            lang_info = detail.get("lang")
+            if isinstance(lang_info, dict):
+                problem.language = lang_info.get(
+                    "verboseName", submission.language
+                )
+            else:
+                problem.language = submission.language
             problem.submission_id = submission.submission_id
         else:
             problem.language = submission.language
@@ -278,6 +323,8 @@ class LeetCodeClient:
         # Set timestamp
         from datetime import datetime
 
-        problem.submitted_at = datetime.fromtimestamp(submission.timestamp)
+        problem.submitted_at = datetime.fromtimestamp(
+            submission.timestamp
+        )
 
         return problem
