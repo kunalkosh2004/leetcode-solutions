@@ -113,3 +113,37 @@ class TestInspectCommand:
         """Shows error when no problem slug provided."""
         result = runner.invoke(app, ["inspect"])
         assert result.exit_code != 0
+
+
+class TestWatchCommand:
+    """Tests for watch command."""
+
+    def test_watch_help(self, runner: CliRunner):
+        """Shows watch command help."""
+        result = runner.invoke(app, ["watch", "--help"])
+        assert result.exit_code == 0
+        assert "watch" in result.output.lower()
+        assert "interval" in result.output.lower()
+        assert "auto-commit" in result.output.lower()
+        assert "auto-push" in result.output.lower()
+
+    def test_watch_no_auth(self, runner: CliRunner):
+        """Watch exits with error when not authenticated."""
+        result = runner.invoke(app, ["watch"])
+        assert result.exit_code == 1
+        assert (
+            "not authenticated" in result.output.lower()
+            or "auth" in result.output.lower()
+        )
+
+
+class TestSyncCycle:
+    """Tests for _run_sync_cycle."""
+
+    def test_sync_cycle_not_authenticated(self):
+        """Sync cycle returns auth failure when not configured."""
+        from leetcode_sync.cli import _run_sync_cycle
+
+        result = _run_sync_cycle()
+        assert result["authenticated"] is False
+        assert result["new_submissions"] == 0

@@ -411,178 +411,47 @@ def sync(
         )
         raise typer.Exit(1)
 
-    project_root = find_project_root()
-    state_manager = StateManager()
-    config = load_config()
-
-    from leetcode_sync.generator.readme import generate_readme
-    from leetcode_sync.generator.solution import (
-        generate_solution_file,
-    )
-    from leetcode_sync.generator.topics import (
-        update_root_readme,
-        update_topic_indexes,
-    )
-    from leetcode_sync.leetcode.client import LeetCodeClient
-
     try:
-        with LeetCodeClient(config) as client:
-            console.print("\nChecking LeetCode...\n")
-            submissions_list = client.get_recent_submissions(50)
+        result = _run_sync_cycle(
+            dry_run=dry_run,
+            force=force,
+            verbose=verbose,
+        )
 
-            # Filter to accepted only
-            accepted = [
-                s for s in submissions_list if s.is_accepted
-            ]
-
-            if not accepted:
-                console.print(
-                    "[yellow]No accepted submissions found.[/yellow]"
-                )
-                return
-
-            # Find new submissions not yet processed
-            new_submissions = [
-                s
-                for s in accepted
-                if not state_manager.is_processed(s.submission_id)
-            ]
-
-            if not new_submissions:
-                console.print(
-                    "[green]✓ All submissions already synced.[/green]"
-                )
-                return
-
+        # Summary
+        console.print()
+        if dry_run:
             console.print(
-                f"Found [cyan]{len(new_submissions)}[/cyan] "
-                f"new accepted submissions.\n"
+                "[yellow]Dry run complete. "
+                "No changes made.[/yellow]"
+            )
+        elif result["dirs_created"]:
+            console.print(
+                "[bold green]Sync complete![/bold green]"
             )
 
-            # Prepare output directories
-            leetcode_dir = project_root / "leetcode"
-            topics_dir = project_root / "topics"
-            leetcode_dir.mkdir(parents=True, exist_ok=True)
-            topics_dir.mkdir(parents=True, exist_ok=True)
+        if result["dirs_created"]:
+            console.print(
+                "\n[bold]Generated:[/bold]"
+            )
+            for d in result["dirs_created"]:
+                console.print(f"  {d}")
 
-            dirs_created = []
-            topics_updated = []
-            errors = []
+        if result["errors"]:
+            console.print(
+                "\n[bold red]Errors:[/bold red]"
+            )
+            for err in result["errors"]:
+                console.print(f"  [red]✗ {err}[/red]")
 
-            for sub in new_submissions:
-                # Fetch full problem data
-                console.print(
-                    f"  Fetching #{sub.question_id} {sub.title}..."
-                )
-                problem = client.get_problem_with_submission(sub)
-
-                if not problem:
-                    errors.append(
-                        f"Could not fetch problem: {sub.title}"
-                    )
-                    continue
-
-                problem_dir = leetcode_dir / problem.folder_name
-
-                if dry_run:
-                    # Dry run: just show what would happen
-                    if not problem_dir.exists():
-                        dirs_created.append(problem_dir)
-                    console.print(
-                        f"  [green]✓[/green] "
-                        f"#{problem.number} {problem.title}"
-                    )
-                    console.print(
-                        f"    Difficulty: "
-                        f"{problem.difficulty.value}"
-                    )
-                    console.print(
-                        f"    Topics: "
-                        f"{', '.join(problem.topics)}"
-                    )
-                else:
-                    # Actually create the files
-                    problem_dir.mkdir(parents=True, exist_ok=True)
-
-                    try:
-                        generate_solution_file(
-                            problem, problem_dir, force=force
-                        )
-                        generate_readme(
-                            problem, problem_dir, force=force
-                        )
-                    except FileExistsError as e:
-                        console.print(
-                            f"  [yellow]![/yellow] {e}"
-                        )
-                        continue
-
-                    # Update topic indexes
-                    updated_topics = update_topic_indexes(
-                        problem, topics_dir
-                    )
-                    topics_updated.extend(updated_topics)
-
-                    # Mark as processed
-                    state_manager.mark_processed(
-                        sub.submission_id
-                    )
-
-                    dirs_created.append(problem_dir)
-
-                    console.print(
-                        f"  [green]✓[/green] "
-                        f"#{problem.number} {problem.title}"
-                    )
-                    console.print(
-                        f"    Difficulty: "
-                        f"{problem.difficulty.value}"
-                    )
-                    console.print(
-                        f"    Topics: "
-                        f"{', '.join(problem.topics)}"
-                    )
-
-            # Update root README stats (not in dry run)
-            if not dry_run and dirs_created:
-                update_root_readme(
-                    leetcode_dir, topics_dir, project_root
-                )
-
-            # Summary
-            console.print()
-            if dry_run:
-                console.print(
-                    "[yellow]Dry run complete. "
-                    "No changes made.[/yellow]"
-                )
-            else:
-                console.print(
-                    "[bold green]Sync complete![/bold green]"
-                )
-
-            if dirs_created:
-                console.print(
-                    "\n[bold]Generated:[/bold]"
-                )
-                for d in dirs_created:
-                    console.print(f"  {d.relative_to(project_root)}")
-
-            if errors:
-                console.print(
-                    "\n[bold red]Errors:[/bold red]"
-                )
-                for err in errors:
-                    console.print(f"  [red]✗ {err}[/red]")
-
-            if not dry_run and dirs_created:
-                console.print(
-                    "\nGit changes available."
-                )
-                console.print(
-                    "Run [cyan]leetcode-sync push[/cyan] "
-                    "to commit and push."
-                )
+        if not dry_run and result["dirs_created"]:
+            console.print(
+                "\nGit changes available."
+            )
+            console.print(
+                "Run [cyan]leetcode-sync push[/cyan] "
+                "to commit and push."
+            )
 
     except Exception as e:
         console.print(f"[red]✗ Error: {e}[/red]")
@@ -699,19 +568,353 @@ def push(
         raise typer.Exit(1) from None
 
 
+def _run_sync_cycle(
+    dry_run: bool = False,
+    force: bool = False,
+    verbose: bool = False,
+    auto_commit: bool = False,
+    auto_push: bool = False,
+) -> dict:
+    """Run a single sync cycle. Returns a summary dict.
+
+    Extracted so both `sync` and `watch` commands can share logic.
+    """
+    setup_logging(verbose)
+    config = load_config()
+
+    result: dict = {
+        "authenticated": True,
+        "new_submissions": 0,
+        "dirs_created": [],
+        "errors": [],
+        "committed": False,
+        "pushed": False,
+    }
+
+    if not config.is_authenticated:
+        result["authenticated"] = False
+        return result
+
+    project_root = find_project_root()
+    state_manager = StateManager()
+
+    from leetcode_sync.generator.readme import generate_readme
+    from leetcode_sync.generator.solution import (
+        generate_solution_file,
+    )
+    from leetcode_sync.generator.topics import (
+        update_root_readme,
+        update_topic_indexes,
+    )
+    from leetcode_sync.leetcode.client import LeetCodeClient
+
+    with LeetCodeClient(config) as client:
+        if not dry_run:
+            console.print("\nChecking LeetCode...\n")
+
+        submissions_list = client.get_recent_submissions(50)
+
+        # Filter to accepted only
+        accepted = [
+            s for s in submissions_list if s.is_accepted
+        ]
+
+        if not accepted:
+            if not dry_run:
+                console.print(
+                    "[yellow]No accepted submissions found.[/yellow]"
+                )
+            return result
+
+        # Find new submissions not yet processed
+        new_submissions = [
+            s
+            for s in accepted
+            if not state_manager.is_processed(s.submission_id)
+        ]
+
+        if not new_submissions:
+            if not dry_run:
+                console.print(
+                    "[green]✓ All submissions already synced.[/green]"
+                )
+            return result
+
+        result["new_submissions"] = len(new_submissions)
+
+        if not dry_run:
+            console.print(
+                f"Found [cyan]{len(new_submissions)}[/cyan] "
+                f"new accepted submissions.\n"
+            )
+
+        # Prepare output directories
+        leetcode_dir = project_root / "leetcode"
+        topics_dir = project_root / "topics"
+        leetcode_dir.mkdir(parents=True, exist_ok=True)
+        topics_dir.mkdir(parents=True, exist_ok=True)
+
+        for sub in new_submissions:
+            # Fetch full problem data
+            if not dry_run:
+                console.print(
+                    f"  Fetching #{sub.question_id} {sub.title}..."
+                )
+            problem = client.get_problem_with_submission(sub)
+
+            if not problem:
+                result["errors"].append(
+                    f"Could not fetch problem: {sub.title}"
+                )
+                continue
+
+            problem_dir = leetcode_dir / problem.folder_name
+
+            if dry_run:
+                if not problem_dir.exists():
+                    result["dirs_created"].append(
+                        str(problem_dir.relative_to(project_root))
+                    )
+                console.print(
+                    f"  [green]✓[/green] "
+                    f"#{problem.number} {problem.title}"
+                )
+                console.print(
+                    f"    Difficulty: "
+                    f"{problem.difficulty.value}"
+                )
+                console.print(
+                    f"    Topics: "
+                    f"{', '.join(problem.topics)}"
+                )
+            else:
+                # Actually create the files
+                problem_dir.mkdir(parents=True, exist_ok=True)
+
+                try:
+                    generate_solution_file(
+                        problem, problem_dir, force=force
+                    )
+                    generate_readme(
+                        problem, problem_dir, force=force)
+                except FileExistsError as e:
+                    console.print(
+                        f"  [yellow]![/yellow] {e}"
+                    )
+                    continue
+
+                # Update topic indexes
+                update_topic_indexes(problem, topics_dir)
+
+                # Mark as processed
+                state_manager.mark_processed(sub.submission_id)
+
+                result["dirs_created"].append(
+                    str(problem_dir.relative_to(project_root))
+                )
+
+                console.print(
+                    f"  [green]✓[/green] "
+                    f"#{problem.number} {problem.title}"
+                )
+                console.print(
+                    f"    Difficulty: "
+                    f"{problem.difficulty.value}"
+                )
+                console.print(
+                    f"    Topics: "
+                    f"{', '.join(problem.topics)}"
+                )
+
+        # Update root README stats (not in dry run)
+        if not dry_run and result["dirs_created"]:
+            update_root_readme(
+                leetcode_dir, topics_dir, project_root
+            )
+
+    # Auto-commit if requested
+    if (
+        not dry_run
+        and auto_commit
+        and result["dirs_created"]
+    ):
+        project_root = find_project_root()
+        git_manager = GitManager(project_root)
+
+        if git_manager.is_git_repo():
+            try:
+                git_manager.stage_files(
+                    git_manager.get_changed_files()
+                )
+
+                # Build commit message
+                problem_numbers = []
+                for f in result["dirs_created"]:
+                    parts = f.split("/")
+                    for part in parts:
+                        if (
+                            len(part) >= 4
+                            and part[:4].isdigit()
+                        ):
+                            try:
+                                num = int(part[:4])
+                                if num not in problem_numbers:
+                                    problem_numbers.append(num)
+                            except ValueError:
+                                pass
+
+                if problem_numbers:
+                    nums = ", ".join(
+                        f"#{n}" for n in sorted(problem_numbers)[:5]
+                    )
+                    msg = f"Add LeetCode solutions: {nums}"
+                else:
+                    msg = "Update leetcode-sync solutions"
+
+                git_manager.commit(msg)
+                result["committed"] = True
+                if not dry_run:
+                    console.print(
+                        f"\n[green]✓ Committed: {msg}[/green]"
+                    )
+            except GitError as e:
+                if not dry_run:
+                    console.print(
+                        f"\n[red]✗ Auto-commit failed: {e}[/red]"
+                    )
+
+        # Auto-push if requested
+        if (
+            result["committed"]
+            and auto_push
+            and git_manager.has_remote()
+        ):
+            try:
+                git_manager.push()
+                result["pushed"] = True
+                if not dry_run:
+                    console.print(
+                        "[green]✓ Pushed successfully![/green]"
+                    )
+            except GitError as e:
+                if not dry_run:
+                    console.print(
+                        f"[red]✗ Auto-push failed: {e}[/red]"
+                    )
+
+    return result
+
+
 @app.command()
 def watch(
-    interval: int = typer.Option(120, "--interval", "-i", help="Polling interval in seconds"),
-    auto_commit: bool = typer.Option(False, "--auto-commit", help="Auto-commit after sync"),
-    auto_push: bool = typer.Option(False, "--auto-push", help="Auto-push after commit"),
+    interval: int = typer.Option(
+        120, "--interval", "-i",
+        help="Polling interval in seconds",
+    ),
+    auto_commit: bool = typer.Option(
+        False, "--auto-commit",
+        help="Auto-commit after each sync",
+    ),
+    auto_push: bool = typer.Option(
+        False, "--auto-push",
+        help="Auto-push after commit",
+    ),
 ) -> None:
     """Watch for new submissions and sync automatically.
 
-    Polls LeetCode at the specified interval and syncs new accepted submissions.
-    Press Ctrl+C to stop gracefully.
+    Polls LeetCode at the specified interval and syncs new accepted
+    submissions. Press Ctrl+C to stop gracefully.
     """
-    console.print("[yellow]Watch mode not yet implemented.[/yellow]")
-    console.print("This will be implemented in Phase 7.")
+    import signal
+    import time
+
+    config = load_config()
+    if not config.is_authenticated:
+        console.print(
+            "[red]✗ Not authenticated with LeetCode.[/red]"
+        )
+        console.print(
+            "\nRun [cyan]leetcode-sync auth[/cyan] "
+            "for setup instructions."
+        )
+        raise typer.Exit(1)
+
+    # Graceful shutdown flag
+    stop = False
+
+    def _handle_signal(
+        signum: int, frame: object,
+    ) -> None:
+        nonlocal stop
+        stop = True
+
+    signal.signal(signal.SIGINT, _handle_signal)
+    signal.signal(signal.SIGTERM, _handle_signal)
+
+    console.print(
+        f"\n[bold]leetcode-sync watch[/bold] "
+        f"(interval: {interval}s)\n"
+    )
+    console.print(
+        "Polling LeetCode for new submissions..."
+    )
+    console.print(
+        "Press [cyan]Ctrl+C[/cyan] to stop.\n"
+    )
+
+    cycle = 0
+    while not stop:
+        cycle += 1
+        console.print(
+            f"[dim]--- Cycle {cycle} "
+            f"({time.strftime('%H:%M:%S')}) ---[/dim]"
+        )
+
+        try:
+            result = _run_sync_cycle(
+                dry_run=False,
+                force=False,
+                verbose=False,
+                auto_commit=auto_commit,
+                auto_push=auto_push,
+            )
+
+            if not result["authenticated"]:
+                console.print(
+                    "[red]✗ Session expired. "
+                    "Run [cyan]leetcode-sync auth[/cyan] "
+                    "to re-authenticate.[/red]"
+                )
+                break
+
+            if result["new_submissions"] == 0:
+                console.print(
+                    "[green]✓ No new submissions.[/green]\n"
+                )
+            else:
+                count = result["new_submissions"]
+                console.print(
+                    f"\n[bold green]Synced {count} "
+                    f"submission(s)![/bold green]\n"
+                )
+        except Exception as e:
+            console.print(
+                f"[red]✗ Error during sync: {e}[/red]\n"
+            )
+
+        # Wait for next cycle
+        if not stop:
+            try:
+                for _ in range(interval):
+                    if stop:
+                        break
+                    time.sleep(1)
+            except (KeyboardInterrupt, SystemExit):
+                stop = True
+
+    console.print(
+        "\n[bold]Watch mode stopped.[/bold]"
+    )
 
 
 @app.command()
