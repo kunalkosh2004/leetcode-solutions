@@ -21,4 +21,5 @@
 - [2181. Merge Nodes in Between Zeros](../leetcode/2181-merge-nodes-in-between-zeros/)
 - [2289. Steps to Make Array Non-decreasing](../leetcode/2289-steps-to-make-array-non-decreasing/)
 - [2487. Remove Nodes From Linked List](../leetcode/2487-remove-nodes-from-linked-list/)
+- [2816. Double a Number Represented as a Linked List](../leetcode/2816-double-a-number-represented-as-a-linked-list/)
 - [3507. Minimum Pair Removal to Sort Array I](../leetcode/3507-minimum-pair-removal-to-sort-array-i/)

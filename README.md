@@ -236,24 +236,24 @@ MIT
 | Difficulty | Solved |
 |------------|--------|
 | Easy | 6 |
-| Medium | 18 |
+| Medium | 19 |
 | Hard | 0 |
-| Total | 24 |
+| Total | 25 |
 
 ## Topics
 
 | Topic | Problems |
 |-------|----------|
-| Linked List | 22 |
+| Linked List | 23 |
 | Array | 9 |
 | Hash Table | 7 |
 | Design | 7 |
+| Stack | 5 |
 | Recursion | 4 |
 | Two Pointers | 4 |
-| Stack | 4 |
 | Doubly-Linked List | 4 |
 | Simulation | 4 |
-| Math | 2 |
+| Math | 3 |
 | Heap (Priority Queue) | 2 |
 | Hash Function | 2 |
 | Data Stream | 2 |
