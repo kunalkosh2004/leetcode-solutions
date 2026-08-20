@@ -236,15 +236,15 @@ MIT
 | Difficulty | Solved |
 |------------|--------|
 | Easy | 6 |
-| Medium | 14 |
+| Medium | 15 |
 | Hard | 0 |
-| Total | 20 |
+| Total | 21 |
 
 ## Topics
 
 | Topic | Problems |
 |-------|----------|
-| Linked List | 18 |
+| Linked List | 19 |
 | Array | 8 |
 | Hash Table | 7 |
 | Design | 7 |
@@ -257,6 +257,7 @@ MIT
 | Heap (Priority Queue) | 2 |
 | Hash Function | 2 |
 | Data Stream | 2 |
+| Sorting | 1 |
 | Greedy | 1 |
 | Bit Manipulation | 1 |
 | Queue | 1 |
