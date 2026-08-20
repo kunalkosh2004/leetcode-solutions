@@ -1055,5 +1055,143 @@ def _check_git(project_root: Path) -> None:
         console.print("  [yellow]![/yellow] Not a Git repository yet")
 
 
+@app.command()
+def serve(
+    port: int = typer.Option(8901, "--port", "-p", help="Port to listen on"),
+    auto_push: bool = typer.Option(True, "--auto-push", help="Auto-push after sync"),
+) -> None:
+    """Start local server to receive browser extension notifications.
+
+    Runs a lightweight HTTP server that listens for submission notifications
+    from the leetcode-sync Chrome extension. When a notification is received,
+    it triggers a sync and optionally pushes to GitHub.
+    """
+    import json
+    import signal
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from threading import Thread
+
+    from leetcode_sync.config import load_config
+
+    config = load_config()
+    if not config.is_authenticated:
+        console.print("[red]✗ Not authenticated with LeetCode.[/red]")
+        console.print("\nRun [cyan]leetcode-sync auth[/cyan] for setup instructions.")
+        raise typer.Exit(1)
+
+    class SubmissionHandler(BaseHTTPRequestHandler):
+        """Handle requests from the browser extension."""
+
+        def log_message(self, format: str, *args: object) -> None:
+            """Suppress default HTTP logging."""
+            pass
+
+        def do_OPTIONS(self) -> None:
+            """Handle CORS preflight."""
+            self.send_response(200)
+            self._set_cors_headers()
+            self.end_headers()
+
+        def do_POST(self) -> None:
+            """Handle submission notification from extension."""
+            if self.path != "/submit":
+                self.send_response(404)
+                self.end_headers()
+                return
+
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length)
+
+            try:
+                data = json.loads(body)
+            except json.JSONDecodeError:
+                self.send_response(400)
+                self.end_headers()
+                return
+
+            title_slug = data.get("titleSlug", "")
+            title = data.get("title", title_slug)
+
+            console.print(
+                f"\n[bold cyan]📥 Received submission:[/bold cyan] {title}"
+            )
+
+            # Run sync in a background thread so we can respond quickly
+            def do_sync() -> None:
+                try:
+                    result = _run_sync_cycle(
+                        dry_run=False,
+                        force=False,
+                        auto_commit=True,
+                        auto_push=auto_push,
+                    )
+                    if result["dirs_created"]:
+                        console.print(
+                            f"[green]✓ Synced {len(result['dirs_created'])} problem(s)[/green]"
+                        )
+                    elif result["new_submissions"] == 0 and not result["errors"]:
+                        console.print("[yellow]No new submissions to sync[/yellow]")
+                    if result["errors"]:
+                        for err in result["errors"]:
+                            console.print(f"[red]✗ {err}[/red]")
+                except Exception as e:
+                    console.print(f"[red]✗ Sync error: {e}[/red]")
+
+            Thread(target=do_sync, daemon=True).start()
+
+            # Respond immediately
+            response = json.dumps({"status": "ok", "message": "Sync started"})
+            self.send_response(200)
+            self._set_cors_headers()
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(response.encode())
+
+        def do_GET(self) -> None:
+            """Health check endpoint."""
+            if self.path == "/health":
+                response = json.dumps({"status": "ok", "service": "leetcode-sync"})
+                self.send_response(200)
+                self._set_cors_headers()
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(response.encode())
+            else:
+                self.send_response(404)
+                self.end_headers()
+
+        def _set_cors_headers(self) -> None:
+            """Set CORS headers for browser extension."""
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+
+    server = HTTPServer(("127.0.0.1", port), SubmissionHandler)
+
+    # Graceful shutdown
+    def shutdown_handler(signum: int, frame: object) -> None:
+        console.print("\n[yellow]Shutting down server...[/yellow]")
+        server.shutdown()
+
+    signal.signal(signal.SIGINT, shutdown_handler)
+    signal.signal(signal.SIGTERM, shutdown_handler)
+
+    console.print(
+        f"\n[bold green]🚀 leetcode-sync server running on http://127.0.0.1:{port}[/bold green]\n"
+    )
+    console.print("Listening for browser extension notifications...")
+    console.print("Press [cyan]Ctrl+C[/cyan] to stop.\n")
+    console.print("[dim]Install the Chrome extension from:[/dim]")
+    console.print(f"[dim]  {Path(__file__).parent.parent.parent / 'extension'}[/dim]\n")
+
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+        console.print("[green]✓ Server stopped.[/green]")
+
+
 if __name__ == "__main__":
     app()
