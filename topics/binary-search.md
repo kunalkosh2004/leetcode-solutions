@@ -1,4 +1,3 @@
-# Bit Manipulation
+# Binary Search
 
-- [1386. Cinema Seat Allocation](../leetcode/1386-cinema-seat-allocation/)
 - [3116. Kth Smallest Amount With Single Denomination Combination](../leetcode/3116-kth-smallest-amount-with-single-denomination-combination/)

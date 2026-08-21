@@ -237,31 +237,34 @@ MIT
 |------------|--------|
 | Easy | 6 |
 | Medium | 19 |
-| Hard | 0 |
-| Total | 25 |
+| Hard | 1 |
+| Total | 26 |
 
 ## Topics
 
 | Topic | Problems |
 |-------|----------|
 | Linked List | 23 |
-| Array | 9 |
+| Array | 10 |
 | Hash Table | 7 |
 | Design | 7 |
 | Stack | 5 |
+| Math | 4 |
 | Recursion | 4 |
 | Two Pointers | 4 |
 | Doubly-Linked List | 4 |
 | Simulation | 4 |
-| Math | 3 |
 | Heap (Priority Queue) | 2 |
 | Hash Function | 2 |
+| Bit Manipulation | 2 |
 | Data Stream | 2 |
 | Monotonic Stack | 2 |
 | Sorting | 1 |
 | Greedy | 1 |
-| Bit Manipulation | 1 |
 | Queue | 1 |
 | Dynamic Programming | 1 |
+| Binary Search | 1 |
+| Combinatorics | 1 |
+| Number Theory | 1 |
 | Ordered Set | 1 |
 <!-- LEETCODE_STATS_END -->
