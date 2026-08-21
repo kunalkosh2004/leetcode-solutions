@@ -1,5 +1,8 @@
 # Stack
 
+- [94. Binary Tree Inorder Traversal](../leetcode/0094-binary-tree-inorder-traversal/)
+- [144. Binary Tree Preorder Traversal](../leetcode/0144-binary-tree-preorder-traversal/)
+- [145. Binary Tree Postorder Traversal](../leetcode/0145-binary-tree-postorder-traversal/)
 - [234. Palindrome Linked List](../leetcode/0234-palindrome-linked-list/)
 - [1472. Design Browser History](../leetcode/1472-design-browser-history/)
 - [2289. Steps to Make Array Non-decreasing](../leetcode/2289-steps-to-make-array-non-decreasing/)

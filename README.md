@@ -235,10 +235,10 @@ MIT
 
 | Difficulty | Solved |
 |------------|--------|
-| Easy | 6 |
+| Easy | 12 |
 | Medium | 19 |
 | Hard | 1 |
-| Total | 26 |
+| Total | 32 |
 
 ## Topics
 
@@ -246,14 +246,18 @@ MIT
 |-------|----------|
 | Linked List | 23 |
 | Array | 10 |
+| Stack | 8 |
 | Hash Table | 7 |
 | Design | 7 |
-| Stack | 5 |
+| Tree | 6 |
+| Depth-First Search | 6 |
+| Binary Tree | 6 |
 | Math | 4 |
 | Recursion | 4 |
 | Two Pointers | 4 |
 | Doubly-Linked List | 4 |
 | Simulation | 4 |
+| Breadth-First Search | 3 |
 | Heap (Priority Queue) | 2 |
 | Hash Function | 2 |
 | Bit Manipulation | 2 |
