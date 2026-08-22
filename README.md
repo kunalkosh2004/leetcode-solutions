@@ -235,39 +235,41 @@ MIT
 
 | Difficulty | Solved |
 |------------|--------|
-| Easy | 12 |
-| Medium | 19 |
+| Easy | 20 |
+| Medium | 20 |
 | Hard | 1 |
-| Total | 32 |
+| Total | 41 |
 
 ## Topics
 
 | Topic | Problems |
 |-------|----------|
 | Linked List | 23 |
-| Array | 10 |
+| Array | 13 |
 | Stack | 8 |
+| Tree | 8 |
+| Binary Tree | 8 |
+| Binary Search | 7 |
+| Depth-First Search | 7 |
 | Hash Table | 7 |
 | Design | 7 |
-| Tree | 6 |
-| Depth-First Search | 6 |
-| Binary Tree | 6 |
-| Math | 4 |
+| Math | 6 |
+| Breadth-First Search | 5 |
 | Recursion | 4 |
 | Two Pointers | 4 |
 | Doubly-Linked List | 4 |
 | Simulation | 4 |
-| Breadth-First Search | 3 |
+| Sorting | 2 |
+| Interactive | 2 |
 | Heap (Priority Queue) | 2 |
 | Hash Function | 2 |
 | Bit Manipulation | 2 |
 | Data Stream | 2 |
 | Monotonic Stack | 2 |
-| Sorting | 1 |
+| Newton's Method | 1 |
 | Greedy | 1 |
 | Queue | 1 |
 | Dynamic Programming | 1 |
-| Binary Search | 1 |
 | Combinatorics | 1 |
 | Number Theory | 1 |
 | Ordered Set | 1 |
